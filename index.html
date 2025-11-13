@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>로또추첨 - 섞이는 회전공/폭죽/환호</title>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    body { text-align: center; background:#212632; }
+    #ball-container {
+      position: relative; width: 430px; height: 430px; margin: 40px auto;
+      background:#fff; border-radius:50%; box-shadow:0 0 55px #ccc,0 0 10px #fff inset;
+      overflow:hidden;
+    }
+    .tball {
+      position: absolute;
+      border-radius:50%; text-align:center; line-height:17px; font-weight:600;
+      font-size: .85em; border:1px solid #fff; color:#fff;
+      user-select:none; box-shadow:0 0 5px #2224; z-index:1; opacity:0.56; pointer-events:none;
+      background: var(--ball-color);
+      transition: left .17s, top .17s;
+    }
+    .result-ball {
+      position: absolute;
+      width: 44px; height: 44px;
+      border-radius:50%;
+      text-align:center; line-height:44px; font-weight:bold; font-size:1.18em;
+      border:2px solid #fff; box-shadow:0 0 7px #222; color:#fff; z-index:2; user-select:none;
+      background: var(--ball-color);
+    }
+    .bonus-label-onball {
+      position: absolute; left:50%; top:-22px; transform:translateX(-50%);
+      font-size: .99em; font-weight: 700; color:#ea5353; z-index: 3;
+      text-shadow: 0 0 6px #fff;
+      pointer-events:none; white-space:nowrap;
+    }
+    #drawn-numbers { margin-top:28px; min-height:32px; font-size:1.1em; }
+    #cheer { display:none; font-size:2em; font-weight:700; color:#41aa51; margin-top:32px; animation:pop 1.3s ease;}
+    @keyframes pop {0%{transform:scale(0.3);opacity:0;}60%{transform:scale(1.1);opacity:1;}100%{transform:scale(1);opacity:1;}}
+  </style>
+</head>
+<body>
+  <h1 style="color:#ffe056;text-shadow:0 2px 7px #3337;">로또 추첨기</h1>
+  <div id="ball-container"></div>
+  <button id="draw-btn" style="margin-top:20px;font-size:1.1em;padding:10px 28px;">추첨 시작</button>
+  <div id="drawn-numbers"></div>
+  <div id="cheer">🎉 축하합니다! 🎉</div>
+  <audio id="cheer-audio" src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfa1b74.mp3"></audio>
+  <script>
+    // 공색상 함수
+    function getColor(n) {
+      if(n<=9) return '#ffe056';
+      if(n<=19) return '#56aaff';
+      if(n<=29) return '#ea5353';
+      if(n<=39) return '#aaaaaa';
+      return '#2bd27a';
+    }
+    // ------ 투명공: 안쪽에서 많이, 서로 안겹치게 ------
+    class TBall {
+      constructor(num) {
+        this.num = num;
+        this.size = 19+Math.random()*9;
+        this.angle = Math.random()*2*Math.PI;
+        this.radius = 95+Math.random()*65;
+        this.speed = 0.6+Math.random()*1.1;
+        this.cx=215; this.cy=215;
+      }
+      tick(balls) {
+        this.angle += this.speed/720;
+        // 임시 새좌표
+        let tx = this.cx + Math.cos(this.angle)*this.radius;
+        let ty = this.cy + Math.sin(this.angle)*this.radius;
+        // 서로 겹침 방지
+        for(let b of balls) {
+          if(b===this) continue;
+          let dist = Math.hypot(b.x-tx, b.y-ty);
+          if(dist < this.size+b.size-4) {
+            this.angle += Math.PI/6; // 방향 바꾸기
+            tx = this.cx + Math.cos(this.angle)*this.radius;
+            ty = this.cy + Math.sin(this.angle)*this.radius;
+          }
+        }
+        this.x=tx; this.y=ty;
+      }
+    }
+    // ------ 결과공: 밖에서 회전 ------
+    let coloredBalls = [], resultAngle = 0;
+    function renderResultBalls() {
+      let outRad=175, len=coloredBalls.length;
+      coloredBalls.forEach((obj,i)=>{
+        let angle = resultAngle + 2*Math.PI*i/len;
+        let x = 215+Math.cos(angle)*outRad;
+        let y = 215+Math.sin(angle)*outRad;
+        let el=document.createElement('div');
+        el.className='result-ball';
+        el.style.left = (x-22)+'px';
+        el.style.top = (y-22)+'px';
+        el.style.setProperty('--ball-color', getColor(obj.num));
+        el.style.borderColor = "#fff";
+        el.textContent = obj.num;
+        if(i===len-1) {
+          let label=document.createElement('div');
+          label.className='bonus-label-onball';
+          label.textContent="보너스";
+          el.appendChild(label);
+        }
+        container.appendChild(el);
+      });
+    }
+    // ------ 전체 애니메이션 ------
+    let tballs=Array.from({length:38}, (_,i)=>new TBall(Math.floor(Math.random()*45)+1));
+    const container = document.getElementById('ball-container');
+    function animate() {
+      container.innerHTML='';
+      // 투명공 움직임/겹침 방지 tick
+      tballs.forEach(b=>b.tick(tballs));
+      tballs.forEach(b=>{
+        let el=document.createElement('div');
+        el.className='tball';
+        el.style.left=(b.x-b.size/2)+'px';
+        el.style.top=(b.y-b.size/2)+'px';
+        el.style.width = el.style.height = b.size+'px';
+        el.style.setProperty('--ball-color', getColor(b.num));
+        el.style.borderColor = "#fff";
+        el.textContent = b.num;
+        container.appendChild(el);
+      });
+      renderResultBalls();
+      if(coloredBalls.length) resultAngle += 0.019;
+      requestAnimationFrame(animate);
+    }
+    animate();
+    // ------ 추첨, 폭죽, 환호 ------
+    const ballNumbers = Array.from({length:45},(_,i)=>i+1);
+    const drawBtn = document.getElementById('draw-btn');
+    const drawnNumbersDiv = document.getElementById('drawn-numbers');
+    const cheerDiv = document.getElementById('cheer');
+    const cheerAudio = document.getElementById('cheer-audio');
+    function firework() {
+      confetti({particleCount:100,spread:70,origin:{y:0.8}});
+      confetti({particleCount:80,angle:60,spread:90,origin:{x:0.25,y:0.9}});
+      confetti({particleCount:80,angle:120,spread:90,origin:{x:0.75,y:0.9}});
+    }
+    drawBtn.onclick = function() {
+      drawBtn.disabled = true;
+      cheerDiv.style.display = "none";
+      let nums=[...ballNumbers].sort(()=>Math.random()-0.5);
+      let picked = nums.slice(0,6).sort((a,b)=>a-b);
+      let bonus = nums[6];
+      coloredBalls = picked.map(n=>({num:n})).concat({num:bonus});
+      drawnNumbersDiv.innerHTML =
+        picked.map(n=>`<span style="background:${getColor(n)};color:#fff;border-radius:50%;display:inline-block;width:32px;height:32px;line-height:32px;font-weight:bold;margin:0 4px;">${n}</span>`).join('')
+        + `<span style="color:#ea5353;font-weight:bold;font-size:1.05em;margin:0 7px;">+ 보너스</span>`
+        + `<span style="background:${getColor(bonus)};color:#fff;border-radius:50%;display:inline-block;width:32px;height:32px;box-shadow:0 0 8px #ffe056;line-height:32px;font-weight:bold;margin:0 4px;">${bonus}</span>`;
+      setTimeout(()=>{
+        firework();
+        cheerDiv.style.display ="block";
+        cheerAudio.currentTime=0;
+        cheerAudio.play();
+        drawBtn.disabled = false;
+      },2100);
+    }
+  </script>
+</body>
+</html>
